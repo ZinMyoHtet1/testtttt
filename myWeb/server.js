@@ -11,7 +11,7 @@ app.use(express.static(__dirname + "/public"));
 app.get("/", function (request, response) {
   response.sendFile(__dirname + "/index.html");
 });
-
+console.log("hello");
 app.post("/", function (req, res) {
   console.log(req.body);
   const firstNum = +req.body.n1;
