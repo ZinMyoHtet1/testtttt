@@ -170,9 +170,19 @@ class Directory {
   }
 
   async deleteDirectoryById(directoryId) {
-    await this.findById(directoryId);
-    this.directories = this.directories.filter((dir) => dir.id !== directoryId);
+    const directoryToDelete = await this.findById(directoryId);
+    const lastParentDirId = directoryToDelete.parentDirIds?.at(-1) || "root";
 
+    this.directories = this.directories.filter((dir) => dir.id !== directoryId);
+    const parentDirectory =
+      lastParentDirId === "root"
+        ? this.rootDirectory
+        : this.directories.find((dir) => dir.id === lastParentDirId);
+
+    const indexToRemove = parentDirectory.childDirIds.findIndex(
+      (id) => id === directoryId
+    );
+    parentDirectory.childDirIds.splice(indexToRemove, 1);
     return await this.sendUpdate(this.directories);
   }
 
