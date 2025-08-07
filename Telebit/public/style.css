@@ -1,0 +1,43 @@
+body {
+  font-family: Arial, sans-serif;
+  background: #f4f6f9;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+.container {
+  background: #fff;
+  padding: 2rem;
+  border-radius: 1rem;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  width: 300px;
+}
+
+input[type="file"] {
+  margin-top: 1rem;
+}
+
+#sendButton {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+  border: none;
+  background-color: #2f80ed;
+  color: white;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+#sendButton:disabled {
+  background-color: #aaa;
+  cursor: not-allowed;
+}
+
+#fileDetails,
+#statusMessage {
+  margin-top: 1rem;
+  font-size: 0.9rem;
+}
