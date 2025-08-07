@@ -1,12 +1,11 @@
-const Telegram = require("./Telegram.js");
 const path = require("path");
 const events = require("events");
-const fs = require("fs");
 
-const filePath = path.join(__dirname, "./../db/user.json");
-const users = require(filePath);
+const Telegram = require("./Telegram.js");
+const CustomError = require("./CustomError.js");
+const DatabaseModel = require("../models/databaseModel.js");
 
-class Database {
+class File {
   constructor(api, chatId) {
     this.chatId = chatId;
     this.isConnected = false;
@@ -14,7 +13,7 @@ class Database {
     this.bot = new Telegram(api);
   }
 
-  async createDatabase() {
+  async createFileDB() {
     const response = await this.bot.sendDocument(
       this.chatId,
       Buffer.from(JSON.stringify([]), "utf8"),
@@ -24,20 +23,11 @@ class Database {
     return response;
   }
 
-  async getDatabseWithUserId(userId) {
-    if (!userId) {
-      const error = new Error("Unauthorized");
-      error.statusCode = 401;
-      throw error;
-    }
+  async getDatabaseWithUserId(userId) {
+    if (!userId) throw new CustomError("userId missing", 400);
 
-    const user = users.find((user) => user.userId === userId);
-
-    if (!user) {
-      const error = new Error("Invalid userId");
-      error.statusCode = 401;
-      throw error;
-    }
+    const user = await DatabaseModel.findOne({ userId });
+    if (!user) throw new CustomError("Invalid userId", 401);
 
     return user["file"];
   }
@@ -49,7 +39,7 @@ class Database {
       this.database = database;
       this.isConnected = true;
     } else {
-      throw new Error("invalid databaseId");
+      throw new CustomError("invalid databaseId", 401);
     }
   }
 
@@ -59,38 +49,30 @@ class Database {
       result = JSON.parse(result.toString("utf8"));
 
       if (!result) {
-        throw new Error("Database not initialized properly.");
+        throw new CustomError("Database not initialized properly.", 400);
       }
       this.files = result;
       return result;
     } else {
       console.log("need to connect database");
+      throw new CustomError("need to connect database", 400);
     }
   }
 
   async create(newData) {
     await this.find(); // returns { createAt, data: [...] }
-
     this.files.push(newData); // update the array in-place
-    const updatedJSON = JSON.stringify(this.files); // stringify the whole updated object
-    const result = await this.bot.sendDocument(
-      this.chatId,
-      Buffer.from(updatedJSON, "utf8"),
-      "text/plain",
-      "updated_telebit.txt"
-    );
-    return result;
+    return await this.sendUpdate(this.files);
   }
 
   async findWithUploadId(uploadId) {
     await this.find(); // returns { createAt, data: [...] }
     const result = this.files.find((file) => file.uploadId === uploadId);
     if (!result) {
-      const error = new Error(
-        `cannot find file with this uploadId: ${uploadId}`
+      throw new CustomError(
+        `cannot find file with this uploadId: ${uploadId}`,
+        404
       );
-      error.statusCode = 404;
-      throw error;
     }
     return result;
   }
@@ -101,46 +83,26 @@ class Database {
     const ext = path.extname(file.filename);
     const basename = path.basename(file.filename, ext);
 
-    if (basename === name) {
-      const error = new Error("this name is same old name");
-      error.statusCode = 409;
-      throw error;
-    }
+    if (basename === name)
+      throw new CustomError("this name is same old name", 409);
 
     file.filename = name + ext;
     file.updatedAt = Date.now();
     delete file.fileIds;
     await this.find();
-    const files = this.files.filter((file) => file.uploadId !== uploadId);
-    files.push(file);
-    this.files = files;
-    const updatedJSON = JSON.stringify(this.files);
-
-    const result = await this.bot.sendDocument(
-      this.chatId,
-      Buffer.from(updatedJSON, "utf8"),
-      "text/plain",
-      "updated_telebit.txt"
-    );
+    this.files = this.files.filter((file) => file.uploadId !== uploadId);
+    this.files.push(file);
+    const result = await this.sendUpdate(this.files);
 
     return { result, file };
   }
 
   async deleteFileByUploadId(uploadId) {
     await this.findWithUploadId(uploadId);
-    // const response = await this.find();
     const files = this.files.filter((file) => file.uploadId !== uploadId);
     this.files = files;
-    const updatedJSON = JSON.stringify(this.files);
 
-    const result = await this.bot.sendDocument(
-      this.chatId,
-      Buffer.from(updatedJSON, "utf8"),
-      "text/plain",
-      "updated_telebit.txt"
-    );
-
-    return result;
+    return await this.sendUpdate(this.files);
   }
 
   async readFileSingle(fileId) {
@@ -172,15 +134,28 @@ class Database {
     return emitter;
   }
 
-  writeFileSync(userId, content) {
-    const user = users.find((user) => user.userId === userId);
+  async updateFileDB(userId, content) {
+    const user = await DatabaseModel.findOne({ userId });
+    if (!user)
+      throw new CustomError(`no found user with this userId: ${userId}`, 404);
 
-    user["file"] = content;
-    fs.writeFileSync(filePath, JSON.stringify(users), {
-      encoding: "utf8",
-      flag: "w",
+    const update = { file: content };
+    await DatabaseModel.findOneAndUpdate({ userId }, update, {
+      new: true,
     });
+  }
+
+  async sendUpdate(data) {
+    const updatedJSON = JSON.stringify(data);
+
+    const result = await this.bot.sendDocument(
+      this.chatId,
+      Buffer.from(updatedJSON, "utf8"),
+      "text/plain",
+      "updated_telebit.txt"
+    );
+    return result;
   }
 }
 
-module.exports = Database;
+module.exports = File;

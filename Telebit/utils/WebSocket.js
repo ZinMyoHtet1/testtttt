@@ -15,6 +15,7 @@ class WebSocket {
           }
         } catch (err) {
           console.log(err.message, "web socket");
+          throw err;
         }
       });
 

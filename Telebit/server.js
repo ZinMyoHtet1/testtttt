@@ -1,17 +1,22 @@
-const path = require("path");
-
 require("dotenv").config();
 const { app } = require("./app.js");
 
-const Database = require("./utils/Database");
-const fileRoutes = require("./routes/fileRoutes.js");
-const telegramRoutes = require("./routes/telegramRoutes.js");
-const directoryRoutes = require("./routes/directoryRoutes.js");
-const writeFileSync = require("./utils/writeFileSync.js");
+const File = require("./utils/File.js");
+const Directory = require("./utils/Directory");
+const globalErrorHandler = require("./utils/globalErrorHandler");
+const asyncErrorHandler = require("./utils/asyncErrorHandler");
+
+const fileRoutes = require("./routes/fileRoutes");
+const telegramRoutes = require("./routes/telegramRoutes");
+const directoryRoutes = require("./routes/directoryRoutes");
+
+const DatabaseModel = require("./models/databaseModel");
+const CustomError = require("./utils/CustomError.js");
 
 const TELEGRAM_BOT_API = process.env.TELEGRAM_BOT_API;
 const CHAT_ID = +process.env.CHAT_ID;
-const db = new Database(TELEGRAM_BOT_API, CHAT_ID);
+const file = new File(TELEGRAM_BOT_API, CHAT_ID);
+const directory = new Directory(TELEGRAM_BOT_API, CHAT_ID);
 
 app.get("/", (req, res) => {
   res.send("Welcome from my web");
@@ -19,58 +24,34 @@ app.get("/", (req, res) => {
 
 app.use("/files", fileRoutes);
 app.use("/telegram", telegramRoutes);
-app.use("/directory", directoryRoutes);
+app.use("/directories", directoryRoutes);
 
-app.get("/createDatabase", async (req, res) => {
-  try {
+app.get(
+  "/addUser",
+  asyncErrorHandler(async function (req, res, next) {
     const userId = req.headers.userid;
+    if (!userId) return next(new CustomError("userId missing", 400));
+    const doesExist = await DatabaseModel.findOne({ userId: userId });
+    if (doesExist)
+      return next(new CustomError("this userId has already existed!", 409));
 
-    const result = await db.createDatabase();
-    writeFileSync(userId, result, path.join(__dirname, "./db/user.json"));
-
+    const fileDB = await file.createFileDB();
+    const directoryDB = await directory.createDirectoryDB();
+    const user = await DatabaseModel.create({
+      userId,
+      file: fileDB,
+      directory: directoryDB,
+    });
     res.status(200).json({
       status: "success",
-      data: result,
+      data: user,
     });
-  } catch (error) {
-    res.status(error.statusCode).json({
-      status: "fail",
-      message: error.message,
-    });
-  }
+  })
+);
+
+app.all("/{*any}", (req, res, next) => {
+  const error = new CustomError(`Route "${req.originalUrl} is not found`, 404);
+  next(error);
 });
 
-// const server = app.listen(PORT, () => {
-//   console.log(`your server is running on port ${PORT}`);
-// });
-
-// module.exports = webSocket.connect(server);
-// const wss = new WebSocket.Server({ server });
-
-// wss.on("connection", (ws, req) => {
-//   console.log("on connection");
-
-//   ws.on("message", (msg) => {
-//     try {
-//       const { uploadSessionId } = JSON.parse(msg);
-//       if (uploadSessionId) {
-//         uploadSessions.set(uploadSessionId, ws);
-//       }
-//       console.log("on message");
-//     } catch (err) {
-//       console.error("Invalid WebSocket message");
-//     }
-//   });
-
-//   ws.on("close", () => {
-//     for (const [key, client] of uploadSessions.getStorage().entries()) {
-//       if (client === ws) uploadSessions.delete(key);
-//     }
-//   });
-// });
-
-// console.log(uploadSessions, "from server");
-
-// module.exports = webSocket;
-
-// module.exports = server;
+app.use(globalErrorHandler);

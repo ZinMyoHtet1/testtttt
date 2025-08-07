@@ -62,7 +62,8 @@ sendButton.addEventListener("click", async () => {
   formData.append("file", selectedFile);
 
   try {
-    const parentId = "93ede701-a030-4f05-b817-fd02a7955ff1";
+    const parentId = "ecefb445-1066-4100-bdca-9d3f8100b980";
+    // const parentId = "root";
     const response = await fetch(
       `http://localhost:4040/files/upload?directory=${parentId}`,
       {

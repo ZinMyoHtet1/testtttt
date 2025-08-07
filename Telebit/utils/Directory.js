@@ -1,10 +1,9 @@
-const Telegram = require("./Telegram.js");
-const path = require("path");
 const crypto = require("crypto");
-const fs = require("fs");
 
-const filePath = path.join(__dirname, "./../db/user.json");
-const users = require(filePath);
+const Telegram = require("./Telegram.js");
+const CustomError = require("./CustomError.js");
+
+const DatabaseModel = require("./../models/databaseModel.js");
 
 async function generateUUID() {
   try {
@@ -29,7 +28,7 @@ class Directory {
     if (result) {
       this.directory = directory;
     } else {
-      throw new Error("invalid databaseId");
+      throw new CustomError("invalid databaseId", 401);
     }
   }
 
@@ -43,10 +42,9 @@ class Directory {
       },
     ];
 
-    const newDbJSON = JSON.stringify(newDB);
     const response = await this.bot.sendDocument(
       this.chatId,
-      Buffer.from(newDbJSON, "utf8"),
+      Buffer.from(JSON.stringify(newDB), "utf8"),
       "text/plain",
       "directory.txt"
     );
@@ -55,11 +53,8 @@ class Directory {
   }
 
   async find() {
-    if (!this.directory) {
-      const error = new Error("no connection to directory db");
-      error.statusCode = 401;
-      throw error;
-    }
+    if (!this.directory)
+      throw new CustomError("no connection to directory db", 400);
     let result = await this.bot.getDocument(this.directory.fileId);
     result = JSON.parse(result.toString("utf8"));
     this.directories = result;
@@ -70,11 +65,9 @@ class Directory {
   async findById(id) {
     await this.find();
     const result = this.directories.find((dir) => dir.id === id);
-    if (!result) {
-      const error = new Error(`no found directory with this dirId: ${id}`);
-      error.statusCode = 404;
-      throw error;
-    }
+    if (!result)
+      throw new CustomError(`no found directory with this dirId: ${id}`, 404);
+
     return result;
   }
 
@@ -107,11 +100,8 @@ class Directory {
         (dir) => dir.name
       );
 
-      if (childDirnamesUnderRoot.includes(name)) {
-        const error = new Error(`this folder name existed`);
-        error.statusCode = 409;
-        throw error;
-      }
+      if (childDirnamesUnderRoot.includes(name))
+        throw new CustomError(`this folder name existed`, 409);
 
       const parentDirIds = [...parentDirIdsFromRoot, parentId];
       const id = await generateUUID();
@@ -133,20 +123,10 @@ class Directory {
     return { result, directory: newDirectory };
   }
 
-  getDirectoryDBWithUserId(userId) {
-    if (!userId) {
-      const error = new Error("Unauthorized");
-      error.statusCode = 401;
-      throw error;
-    }
-
-    const user = users.find((user) => user.userId === userId);
-
-    if (!user) {
-      const error = new Error("Invalid userId");
-      error.statusCode = 401;
-      throw error;
-    }
+  async getDatabaseWithUserId(userId) {
+    if (!userId) throw new CustomError("Unauthorized", 401);
+    const user = await DatabaseModel.findOne({ userId });
+    if (!user) throw new CustomError("Invalid userId", 401);
 
     return user["directory"];
   }
@@ -158,18 +138,52 @@ class Directory {
     return await this.sendUpdate(this.directories);
   }
 
-  rename() {}
+  async removeFileFromDirectory(directoryId, uploadId) {
+    const directory = await this.findById(directoryId);
+    const indexToRemove = directory.files.findIndex(
+      (element) => element === uploadId
+    );
+    directory.files.splice(indexToRemove, 1);
 
-  delete() {}
-  // const path = require("path");
+    return await this.sendUpdate(this.directories);
+  }
 
-  writeFileSync(userId, content) {
-    const user = users.find((user) => user.userId === userId);
+  async renameDirectoryById(directoryId, name) {
+    const directory = await this.findById(directoryId);
+    const oldName = directory.name;
 
-    user["directory"] = content;
-    fs.writeFileSync(filePath, JSON.stringify(users), {
-      encoding: "utf8",
-      flag: "w",
+    if (oldName === name)
+      throw new CustomError("this name same to the old name", 409);
+
+    //removed target directory
+    this.directories = this.directories.filter(
+      (dir) => dir.id !== directory.id
+    );
+    //updated target directory
+    directory.name = name;
+    directory.updatedAt = Date.now();
+    this.directories.push(directory);
+
+    //send to telegram
+    const result = await this.sendUpdate(this.directories);
+    return { result, directory };
+  }
+
+  async deleteDirectoryById(directoryId) {
+    await this.findById(directoryId);
+    this.directories = this.directories.filter((dir) => dir.id !== directoryId);
+
+    return await this.sendUpdate(this.directories);
+  }
+
+  async updateDirectoryDB(userId, content) {
+    const user = await DatabaseModel.findOne({ userId });
+    if (!user)
+      throw new CustomError(`no found user with this userId: ${userId}`, 404);
+
+    const update = { directory: content };
+    await DatabaseModel.findOneAndUpdate({ userId }, update, {
+      new: true,
     });
   }
 

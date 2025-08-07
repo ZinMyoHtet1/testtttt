@@ -1,16 +1,11 @@
 const TelegramBot = require("node-telegram-bot-api");
 const https = require("https");
-const event = require("events");
-const { Readable } = require("stream");
-const { resolve } = require("path");
 
 class Telegram {
   constructor(token) {
     this.token = token;
     this.bot = new TelegramBot(token, { polling: true });
   }
-
-  //   async
 
   async sendMessage(messageChatId, message) {
     const response = await this.bot.sendMessage(messageChatId, message);
@@ -77,8 +72,6 @@ class Telegram {
     fileName = "file.txt",
     caption = ""
   ) {
-    // const fileStream = new Readable.from([fileContent]);
-    // const buffer = Buffer.from(fileContent, "utf8");
     const result = await this.bot.sendDocument(
       +chatId,
       fileContent,
@@ -107,44 +100,6 @@ class Telegram {
       date: result.date,
     };
   }
-
-  // async editDocumentAndUpdate(fileId) {
-  //   let result = await this.getDocument(fileId);
-  //   if(typeof result === 'string'){
-  //     result = JSON.parse(result)
-  //   }
-
-  // }
-
-  // async editDocument(
-  //   chatId,
-  //   messageId,
-  //   fileContent,
-  //   filename = "document.txt"
-  // ) {
-  //   const stream = Readable.from([fileContent]);
-
-  //   return await this.bot.editMessageMedia(
-  //     {
-  //       type: "document",
-  //       media: "attach://" + filename, // attach reference
-  //       caption: "",
-  //     },
-  //     {
-  //       chat_id: chatId,
-  //       message_id: messageId,
-  //       files: {
-  //         [filename]: {
-  //           value: stream,
-  //           options: {
-  //             filename,
-  //             contentType: "application/json",
-  //           },
-  //         },
-  //       },
-  //     }
-  //   );
-  // }
 }
 
 module.exports = Telegram;
